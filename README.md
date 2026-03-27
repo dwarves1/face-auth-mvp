@@ -68,62 +68,62 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │                        FastAPI Server                           │
 │                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │                   Input Validation Layer                  │  │
-│  │  • Content-Type 검증 (JPEG / PNG / WEBP)                  │  │
-│  │  • 파일 크기 상한 검사 (10 MB)                             │  │
-│  │  • OpenCV 디코딩 실패 감지                                 │  │
-│  └────────────────────────┬─────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                   Input Validation Layer                 │   │
+│  │  • Content-Type 검증 (JPEG / PNG / WEBP)                  │   │
+│  │  • 파일 크기 상한 검사 (10 MB)                               │   │
+│  │  • OpenCV 디코딩 실패 감지                                   │   │
+│  └────────────────────────┬─────────────────────────────────┘   │
 │                           │                                     │
-│  ┌────────────────────────▼─────────────────────────────────┐  │
-│  │              Preprocessing Pipeline (async)               │  │
-│  │  asyncio.gather() ──► id_card  resize (≤ 1280px)         │  │
-│  │                   └─► selfie   resize (≤ 1280px)         │  │
-│  │  (두 이미지 동시 처리 / 이벤트 루프 비블로킹)               │  │
-│  └────────────────────────┬─────────────────────────────────┘  │
+│  ┌────────────────────────▼─────────────────────────────────┐   │
+│  │              Preprocessing Pipeline (async)              │   │
+│  │  asyncio.gather() ──► id_card  resize (≤ 1280px)         │   │
+│  │                   └─► selfie   resize (≤ 1280px)         │   │
+│  │  (두 이미지 동시 처리 / 이벤트 루프 비블로킹)                     │   │
+│  └────────────────────────┬─────────────────────────────────┘   │
 │                           │                                     │
-│  ┌────────────────────────▼─────────────────────────────────┐  │
-│  │          Step 1. Liveness Detection (selfie only)         │  │
-│  │                                                           │  │
-│  │   selfie ──► Face Detection (InsightFace SCRFD)           │  │
-│  │           ──► Face Crop & Resize (80×80)                  │  │
-│  │           ──► MiniSFANet (Silent-Face Anti-Spoofing)      │  │
-│  │           ──► Softmax ──► real_probability [0,1]          │  │
-│  │                                                           │  │
-│  │   real_prob < threshold(0.7) ──► HTTP 400 즉시 반환       │  │
-│  │   (Face Matching 미수행 → 연산 비용 절감)                  │  │
-│  └────────────────────────┬─────────────────────────────────┘  │
+│  ┌────────────────────────▼─────────────────────────────────┐   │
+│  │          Step 1. Liveness Detection (selfie only)        │   │
+│  │                                                          │   │
+│  │   selfie ──► Face Detection (InsightFace SCRFD)          │   │
+│  │           ──► Face Crop & Resize (80×80)                 │   │
+│  │           ──► MiniSFANet (Silent-Face Anti-Spoofing)     │   │
+│  │           ──► Softmax ──► real_probability [0,1]         │   │
+│  │                                                          │   │
+│  │   real_prob < threshold(0.7) ──► HTTP 400 즉시 반환        │   │
+│  │   (Face Matching 미수행 → 연산 비용 절감)                     │   │
+│  └────────────────────────┬─────────────────────────────────┘   │
 │                           │ PASS                                │
-│  ┌────────────────────────▼─────────────────────────────────┐  │
-│  │          Step 2. Face Matching (id_card ↔ selfie)         │  │
-│  │                                                           │  │
-│  │   id_card ──► Face Detection ──► ArcFace Embedding(512D)  │  │
-│  │   selfie  ──► Face Detection ──► ArcFace Embedding(512D)  │  │
-│  │                                                           │  │
-│  │   Cosine Similarity = dot(emb_id, emb_selfie)             │  │
-│  │   similarity ≥ threshold(0.6) ──► passed = True           │  │
-│  └────────────────────────┬─────────────────────────────────┘  │
+│  ┌────────────────────────▼─────────────────────────────────┐   │
+│  │          Step 2. Face Matching (id_card ↔ selfie)        │   │
+│  │                                                          │   │
+│  │   id_card ──► Face Detection ──► ArcFace Embedding(512D) │   │
+│  │   selfie  ──► Face Detection ──► ArcFace Embedding(512D) │   │
+│  │                                                          │   │
+│  │   Cosine Similarity = dot(emb_id, emb_selfie)            │   │
+│  │   similarity ≥ threshold(0.6) ──► passed = True          │   │
+│  └────────────────────────┬─────────────────────────────────┘   │
 │                           │                                     │
-│  ┌────────────────────────▼─────────────────────────────────┐  │
-│  │                  Response Aggregation                     │  │
-│  │  is_verified = liveness.passed AND face_match.passed      │  │
-│  │  ──► VerifyAuthResponse (Pydantic JSON)                   │  │
-│  └──────────────────────────────────────────────────────────┘  │
+│  ┌────────────────────────▼─────────────────────────────────┐   │
+│  │                  Response Aggregation                    │   │
+│  │  is_verified = liveness.passed AND face_match.passed     │   │
+│  │  ──► VerifyAuthResponse (Pydantic JSON)                  │   │
+│  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                       Model Layer                               │
 │                                                                 │
-│  ┌─────────────────────────────┐  ┌────────────────────────┐   │
-│  │   InsightFace buffalo_l     │  │    MiniSFANet          │   │
-│  │   ─────────────────────     │  │    ──────────────      │   │
-│  │   • SCRFD Face Detector     │  │   Silent-Face 호환     │   │
-│  │   • ArcFace R100 (512-D)    │  │   Depthwise-Sep CNN    │   │
-│  │   • L2-Normalized Embedding │  │   Input: 80×80 RGB     │   │
-│  │   • ONNX Runtime 추론       │  │   Output: [spoof, real]│   │
-│  └─────────────────────────────┘  └────────────────────────┘   │
-│           (서버 시작 시 싱글턴으로 1회 초기화)                   │
+│  ┌─────────────────────────────┐  ┌────────────────────────┐    │
+│  │   InsightFace buffalo_l     │  │    MiniSFANet          │    │
+│  │   ─────────────────────     │  │    ──────────────      │    │
+│  │   • SCRFD Face Detector     │  │   Silent-Face 호환      │    │
+│  │   • ArcFace R100 (512-D)    │  │   Depthwise-Sep CNN    │    │
+│  │   • L2-Normalized Embedding │  │   Input: 80×80 RGB     │    │
+│  │   • ONNX Runtime 추론       │  │   Output: [spoof, real] │    │
+│  └─────────────────────────────┘  └────────────────────────┘    │
+│           (서버 시작 시 싱글턴으로 1회 초기화)                          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
